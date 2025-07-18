@@ -417,7 +417,7 @@ export default function Component() {
           </div>
 
           <div className="text-center py-4 sm:py-8">
-            <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 mb-2 sm:mb-4">🛡️ Mission Sécurité</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 mb-2 sm:mb-4">🛡️ Mission Santé-Sécurité</h1>
             <p className="text-base sm:text-xl text-gray-600 mb-4 sm:mb-8 max-w-2xl mx-auto px-2">
               Deviens un expert en santé et sécurité au travail !
             </p>
@@ -428,7 +428,7 @@ export default function Component() {
               <CardHeader className="pb-3 sm:pb-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Target className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-                  Défi Association
+                  Défi'nitions
                 </CardTitle>
                 <CardDescription className="text-sm">Associe 11 mots-clés à leurs définitions</CardDescription>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -594,7 +594,7 @@ export default function Component() {
               <div>
                 <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-700 flex items-center gap-2">
                   <Target className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Zones de définition
+                  Définitions
                 </h2>
                 <div className="grid gap-3 sm:gap-3">
                   {definitions.map((item) => {
