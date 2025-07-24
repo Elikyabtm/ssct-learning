@@ -194,12 +194,13 @@ export default function Component() {
     score: 0,
     completed: false,
     questions: [],
-    timeLeft: 300, // 5 minutes
+    timeLeft: 180, // 3 minutes pour 9 questions
     startTime: null,
   })
   const [finalResults, setFinalResults] = useState(null)
   const timerRef = useRef(null)
   const [shuffledWords, setShuffledWords] = useState([])
+  const [showExportMenu, setShowExportMenu] = useState(false)
 
   // Initialiser les définitions mélangées au chargement
   useEffect(() => {
@@ -224,7 +225,7 @@ export default function Component() {
               score: finalScore,
               totalQuestions: prev.questions.length,
               correctAnswers: prev.score,
-              timeSpent: 180 - prev.timeLeft, // 180 au lieu de 300
+              timeSpent: 180 - prev.timeLeft,
               answers: prev.answers,
               questions: prev.questions,
             })
@@ -262,14 +263,14 @@ export default function Component() {
   // Initialiser le quiz avec 6 questions aléatoires
   const startQuiz = () => {
     const shuffled = [...quizQuestions].sort(() => 0.5 - Math.random())
-    const selected = shuffled.slice(0, 6)
+    const selected = shuffled.slice(0, 9) // 9 questions au lieu de 6
     setQuizState({
       currentQuestion: 0,
       answers: [],
       score: 0,
       completed: false,
       questions: selected,
-      timeLeft: 180, // 3 minutes au lieu de 5
+      timeLeft: 180, // 3 minutes pour 9 questions
       startTime: Date.now(),
     })
     setCurrentPage("quiz")
@@ -392,6 +393,229 @@ export default function Component() {
     return "🔁 Reprends la mission !"
   }
 
+  const shareResults = async (type = "share") => {
+    const gameScore = gameState.score
+    const quizScore = finalResults ? finalResults.correctAnswers : 0
+    const globalScore = gameScore + quizScore
+    const date = new Date().toLocaleDateString("fr-FR")
+    const time = new Date().toLocaleTimeString("fr-FR")
+
+    if (type === "share") {
+      // Partage natif via réseaux sociaux/apps
+      const shareText = `🛡️ Mission Santé - Sécurité - Mes résultats !
+
+📊 Scores obtenus :
+• Défi'nitions : ${gameScore}/11 (${Math.round((gameScore / 11) * 100)}%)
+• Quiz Expert : ${quizScore}/9 (${Math.round((quizScore / 9) * 100)}%)
+• Score Global : ${globalScore}/20 (${Math.round((globalScore / 20) * 100)}%)
+
+${getScoreMessage(finalResults?.score || 0)}
+
+#SantéSécurité #Formation #SST`
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "Mission Sécurité - Mes résultats",
+            text: shareText,
+            url: window.location.href,
+          })
+        } catch (err) {
+          console.log("Partage annulé")
+        }
+      } else {
+        // Fallback pour navigateurs sans Web Share API
+        const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`
+        window.open(shareUrl, "_blank")
+      }
+    } else if (type === "copy") {
+      // Copier dans le presse-papiers
+      const copyText = `🛡️ MISSION SÉCURITÉ - RÉSULTATS
+═══════════════════════════════════════
+
+📊 SCORES DÉTAILLÉS
+Défi'nitions: ${gameScore}/11 (${Math.round((gameScore / 11) * 100)}%)
+Quiz Expert: ${quizScore}/9 (${Math.round((quizScore / 9) * 100)}%)
+Score Global: ${globalScore}/20 (${Math.round((globalScore / 20) * 100)}%)
+
+📅 Session du ${date} à ${time}
+🎯 Tentatives: ${gameState.attempts}
+⏱️ Temps quiz: ${finalResults ? formatTime(finalResults.timeSpent) : "0:00"}
+
+${getScoreMessage(finalResults?.score || 0)}`
+
+      try {
+        await navigator.clipboard.writeText(copyText)
+        // Afficher une notification de succès
+        const notification = document.createElement("div")
+        notification.textContent = "✅ Résultats copiés dans le presse-papiers !"
+        notification.style.cssText = `
+        position: fixed; top: 20px; right: 20px; z-index: 1000;
+        background: #10B981; color: white; padding: 12px 20px;
+        border-radius: 8px; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      `
+        document.body.appendChild(notification)
+        setTimeout(() => document.body.removeChild(notification), 3000)
+      } catch (err) {
+        console.error("Erreur lors de la copie:", err)
+      }
+    } else if (type === "csv") {
+      // Export CSV pour Excel/Sheets
+      const csvContent = [
+        "Catégorie,Score,Total,Pourcentage,Détails",
+        `Défi'nitions,${gameScore},11,${Math.round((gameScore / 11) * 100)}%,Mots associés correctement`,
+        `Quiz Expert,${quizScore},9,${Math.round((quizScore / 9) * 100)}%,Bonnes réponses au quiz`,
+        `Score Global,${globalScore},20,${Math.round((globalScore / 20) * 100)}%,Total des deux épreuves`,
+        "",
+        "Information,Valeur,,,",
+        `Date,${date},,,`,
+        `Heure,${time},,,`,
+        `Tentatives Défi'nitions,${gameState.attempts},,,`,
+        `Temps Quiz,${finalResults ? formatTime(finalResults.timeSpent) : "0:00"},,,`,
+        "",
+        ...(finalResults
+          ? [
+              "Question,Réponse Donnée,Réponse Correcte,Résultat,Type",
+              ...finalResults.answers.map((answer, index) => {
+                const userAnswer =
+                  answer.type === "boolean"
+                    ? answer.answer
+                      ? "Vrai"
+                      : "Faux"
+                    : answer.type === "multiple"
+                      ? finalResults.questions[index].options[answer.answer]
+                      : answer.answer
+
+                const correctAnswer =
+                  answer.type === "boolean"
+                    ? answer.correctAnswer
+                      ? "Vrai"
+                      : "Faux"
+                    : answer.type === "multiple"
+                      ? finalResults.questions[index].options[answer.correctAnswer]
+                      : answer.correctAnswer
+
+                return `"${answer.question.replace(/"/g, '""')}","${userAnswer}","${correctAnswer}",${answer.correct ? "Correct" : "Incorrect"},${answer.type}`
+              }),
+            ]
+          : []),
+      ].join("\n")
+
+      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `mission-securite-${new Date().toISOString().split("T")[0]}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    } else if (type === "report") {
+      // Rapport détaillé en fichier texte
+      const reportContent = `🛡️ MISSION SÉCURITÉ - RAPPORT DÉTAILLÉ
+═══════════════════════════════════════════════════════════════
+
+📋 INFORMATIONS GÉNÉRALES
+Date de la session : ${date}
+Heure de fin : ${time}
+Durée totale estimée : ${Math.floor((gameState.attempts * 10 + (finalResults?.timeSpent || 0)) / 60)}min ${(gameState.attempts * 10 + (finalResults?.timeSpent || 0)) % 60}s
+
+═══════════════════════════════════════════════════════════════
+
+📊 RÉSULTATS PAR ÉPREUVE
+
+🎯 DÉFI'NITIONS
+Score obtenu : ${gameScore}/11 points
+Pourcentage : ${Math.round((gameScore / 11) * 100)}%
+Nombre de tentatives : ${gameState.attempts}
+Statut : ${gameState.completed ? "✅ Terminé avec succès" : "⏰ Arrêté avant la fin"}
+
+⚡ QUIZ EXPERT
+Score obtenu : ${quizScore}/9 points
+Pourcentage : ${Math.round((quizScore / 9) * 100)}%
+Temps utilisé : ${finalResults ? formatTime(finalResults.timeSpent) : "0:00"} / 4:30
+Questions réussies : ${quizScore} bonnes réponses
+
+🏆 SCORE GLOBAL
+Total : ${globalScore}/20 points
+Moyenne générale : ${Math.round((globalScore / 20) * 100)}%
+Évaluation : ${getScoreMessage(finalResults?.score || 0)}
+
+═══════════════════════════════════════════════════════════════
+
+📝 ANALYSE DÉTAILLÉE DES RÉPONSES DU QUIZ
+
+${
+  finalResults
+    ? finalResults.answers
+        .map((answer, index) => {
+          const userAnswer =
+            answer.type === "boolean"
+              ? answer.answer
+                ? "Vrai"
+                : "Faux"
+              : answer.type === "multiple"
+                ? finalResults.questions[index].options[answer.answer]
+                : answer.answer
+
+          const correctAnswer =
+            answer.type === "boolean"
+              ? answer.correctAnswer
+                ? "Vrai"
+                : "Faux"
+              : answer.type === "multiple"
+                ? finalResults.questions[index].options[answer.correctAnswer]
+                : answer.correctAnswer
+
+          return `Question ${index + 1} : ${answer.correct ? "✅ CORRECT" : "❌ INCORRECT"}
+${answer.question}
+
+${answer.correct ? `✓ Bonne réponse : ${correctAnswer}` : `✗ Ta réponse : ${userAnswer}\n✓ Bonne réponse : ${correctAnswer}`}
+
+${"─".repeat(60)}`
+        })
+        .join("\n")
+    : "Aucune donnée de quiz disponible."
+}
+
+═══════════════════════════════════════════════════════════════
+
+📈 RECOMMANDATIONS
+
+${
+  globalScore >= 16
+    ? "🏆 EXCELLENT ! Tu maîtrises parfaitement les concepts de santé et sécurité au travail. Continue à maintenir ce niveau d'expertise."
+    : globalScore >= 12
+      ? "✏️ BIEN ! Tu as de bonnes bases. Révise les points où tu as eu des difficultés pour atteindre l'excellence."
+      : "🔁 À AMÉLIORER ! Il est recommandé de revoir les concepts fondamentaux et de refaire les exercices pour consolider tes connaissances."
+}
+
+Points forts identifiés :
+${gameScore >= 8 ? "• Excellente maîtrise des définitions" : "• Définitions à retravailler"}
+${quizScore >= 7 ? "• Bonne application des connaissances" : "• Application pratique à améliorer"}
+
+═══════════════════════════════════════════════════════════════
+
+📚 RESSOURCES POUR APPROFONDIR
+
+• Code du travail - Partie 4 : Santé et sécurité au travail
+• INRS (Institut National de Recherche et de Sécurité)
+• Guides de prévention par secteur d'activité
+• Formation continue en SST
+
+═══════════════════════════════════════════════════════════════
+
+Rapport généré automatiquement par Mission Sécurité
+© ${new Date().getFullYear()} - Formation Santé et Sécurité au Travail`
+
+      const blob = new Blob([reportContent], { type: "text/plain;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `rapport-mission-securite-${new Date().toISOString().split("T")[0]}.txt`
+      link.click()
+      URL.revokeObjectURL(url)
+    }
+  }
+
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -433,7 +657,7 @@ export default function Component() {
                 <CardDescription className="text-sm">Associe 11 mots-clés à leurs définitions</CardDescription>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <Badge variant="secondary" className="text-xs">
-                    +{definitions.length} points
+                    +11 points
                   </Badge>
                 </div>
               </CardHeader>
@@ -451,10 +675,10 @@ export default function Component() {
                   <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                   Quiz Expert
                 </CardTitle>
-                <CardDescription className="text-sm">6 questions chronométrées pour valider tes acquis</CardDescription>
+                <CardDescription className="text-sm">9 questions chronométrées pour valider tes acquis</CardDescription>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <Badge variant="secondary" className="text-xs">
-                    +20 points max
+                    +9 points max
                   </Badge>
                   <Badge variant="outline" className="text-xs">
                     3 min
@@ -594,7 +818,7 @@ export default function Component() {
               <div>
                 <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-700 flex items-center gap-2">
                   <Target className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Définitions
+                  Zones de définition
                 </h2>
                 <div className="grid gap-3 sm:gap-3">
                   {definitions.map((item) => {
@@ -668,21 +892,21 @@ export default function Component() {
               </CardHeader>
               <CardContent className="space-y-4 sm:space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                  <div className="bg-gradient-to-br from-purple-100 to-purple-200 p-3 sm:p-4 rounded-lg">
-                    <div className="text-2xl sm:text-3xl font-bold text-purple-600">{finalResults.score}/10</div>
-                    <div className="text-xs sm:text-sm text-purple-700">Score final</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-blue-100 to-blue-200 p-3 sm:p-4 rounded-lg">
-                    <div className="text-2xl sm:text-3xl font-bold text-blue-600">
-                      {finalResults.correctAnswers}/{finalResults.totalQuestions}
-                    </div>
-                    <div className="text-xs sm:text-sm text-blue-700">Bonnes réponses</div>
-                  </div>
                   <div className="bg-gradient-to-br from-green-100 to-green-200 p-3 sm:p-4 rounded-lg">
-                    <div className="text-2xl sm:text-3xl font-bold text-green-600">
-                      {formatTime(finalResults.timeSpent)}
+                    <div className="text-2xl sm:text-3xl font-bold text-green-600">{gameState.score}/11</div>
+                    <div className="text-xs sm:text-sm text-green-700">Défi'nitions</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-100 to-purple-200 p-3 sm:p-4 rounded-lg">
+                    <div className="text-2xl sm:text-3xl font-bold text-purple-600">
+                      {finalResults.correctAnswers}/9
                     </div>
-                    <div className="text-xs sm:text-sm text-green-700">Temps utilisé</div>
+                    <div className="text-xs sm:text-sm text-purple-700">Quiz Expert</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-yellow-100 to-yellow-200 p-3 sm:p-4 rounded-lg">
+                    <div className="text-2xl sm:text-3xl font-bold text-yellow-600">
+                      {gameState.score + finalResults.correctAnswers}/20
+                    </div>
+                    <div className="text-xs sm:text-sm text-yellow-700">Score Global</div>
                   </div>
                 </div>
 
@@ -747,12 +971,82 @@ export default function Component() {
               <Button onClick={() => setCurrentPage("home")} size="lg" className="w-full sm:w-auto">
                 🏠 Retour à l'accueil
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage("game")} className="w-full sm:w-auto">
-                🎮 Revoir le jeu
-              </Button>
               <Button variant="outline" onClick={startQuiz} className="w-full sm:w-auto bg-transparent">
                 🔄 Refaire le quiz
               </Button>
+
+              {/* Nouveau système de partage */}
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="w-full sm:w-auto bg-transparent"
+                >
+                  📤 Partager mes résultats ▼
+                </Button>
+
+                {showExportMenu && (
+                  <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[220px]">
+                    <div className="p-2">
+                      <button
+                        onClick={() => {
+                          shareResults("share")
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full text-left px-3 py-3 hover:bg-blue-50 rounded flex items-center gap-3 border-b border-gray-100"
+                      >
+                        <span className="text-lg">🚀</span>
+                        <div>
+                          <div className="font-medium text-sm">Partager</div>
+                          <div className="text-xs text-gray-500">Via réseaux sociaux ou apps</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          shareResults("copy")
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full text-left px-3 py-3 hover:bg-green-50 rounded flex items-center gap-3 border-b border-gray-100"
+                      >
+                        <span className="text-lg">📋</span>
+                        <div>
+                          <div className="font-medium text-sm">Copier</div>
+                          <div className="text-xs text-gray-500">Dans le presse-papiers</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          shareResults("csv")
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full text-left px-3 py-3 hover:bg-purple-50 rounded flex items-center gap-3 border-b border-gray-100"
+                      >
+                        <span className="text-lg">📊</span>
+                        <div>
+                          <div className="font-medium text-sm">CSV</div>
+                          <div className="text-xs text-gray-500">Données pour Excel/Sheets</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          shareResults("report")
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full text-left px-3 py-3 hover:bg-orange-50 rounded flex items-center gap-3"
+                      >
+                        <span className="text-lg">📄</span>
+                        <div>
+                          <div className="font-medium text-sm">Rapport</div>
+                          <div className="text-xs text-gray-500">Fichier texte détaillé</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
